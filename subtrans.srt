@@ -1,0 +1,95 @@
+import argparse
+from googletrans import Translator
+import re
+
+def parse_srt(file_path, encoding='utf-8'):
+    """
+    Parsing file SRT menjadi list of dictionary
+    Setiap dictionary berisi:
+    - index: nomor urut subtitle
+    - start: waktu mulai
+    - end: waktu berakhir
+    - text: teks subtitle
+    """
+    with open(file_path, 'r', encoding=encoding) as f:
+        content = f.read()
+    
+    blocks = content.split('\n\n')
+    subtitles = []
+    
+    for block in blocks:
+        if block.strip() == '':
+            continue
+        
+        lines = block.split('\n')
+        if len(lines) >= 3:
+            index = int(lines[0])
+            timecode = lines[1]
+            text = '\n'.join(lines[2:])
+            
+            # Parse timecode
+            match = re.match(r'(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})', timecode)
+            if match:
+                start = match.group(1)
+                end = match.group(2)
+                
+                subtitles.append({
+                    'index': index,
+                    'start': start,
+                    'end': end,
+                    'text': text
+                })
+    
+    return subtitles
+
+def translate_subtitles(subtitles, dest='en', src='auto'):
+    """
+    Menerjemahkan teks subtitle menggunakan Google Translate
+    """
+    translator = Translator()
+    translated = []
+    
+    for sub in subtitles:
+        try:
+            translated_text = translator.translate(sub['text'], dest=dest, src=src).text
+            translated.append({
+                'index': sub['index'],
+                'start': sub['start'],
+                'end': sub['end'],
+                'text': translated_text
+            })
+        except Exception as e:
+            print(f"Error translating subtitle {sub['index']}: {str(e)}")
+            translated.append(sub)  # Keep original if translation fails
+    
+    return translated
+
+def write_srt(subtitles, output_file, encoding='utf-8'):
+    """
+    Menulis list of dictionary subtitle ke file SRT
+    """
+    with open(output_file, 'w', encoding=encoding) as f:
+        for sub in subtitles:
+            f.write(f"{sub['index']}\n")
+            f.write(f"{sub['start']} --> {sub['end']}\n")
+            f.write(f"{sub['text']}\n\n")
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Translate SRT subtitle file')
+    parser.add_argument('-i', '--input', required=True, help='Input SRT file')
+    parser.add_argument('-o', '--output', required=True, help='Output SRT file')
+    parser.add_argument('-d', '--dest', default='en', help='Target language code (default: en)')
+    parser.add_argument('-e', '--encoding', default='utf-8', help='File encoding (default: utf-8)')
+    
+    args = parser.parse_args()
+    
+    print("Parsing SRT file...")
+    subtitles = parse_srt(args.input, args.encoding)
+    
+    print(f"Translating to {args.dest}...")
+    translated_subs = translate_subtitles(subtitles, args.dest)
+    
+    print("Writing output file...")
+    write_srt(translated_subs, args.output, args.encoding)
+    
+    print("Translation completed!")
